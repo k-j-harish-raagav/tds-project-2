@@ -1,3 +1,4 @@
+# app.py
 import os
 import networkx as nx
 import re
@@ -104,16 +105,37 @@ class LLMWithFallback:
                     time.sleep(0.5)
         raise RuntimeError(f"All models/keys failed. Last error: {last_error}")
 
-    # Required by LangChain agent
+    # Required by LangChain agent: provide a safe bind_tools that does NOT call a missing method
     def bind_tools(self, tools):
+        """
+        Create and return a tool-calling agent bound to a concrete LLM instance.
+        This avoids calling `bind_tools` on the LLM itself (which is not implemented).
+        """
         llm_instance = self._get_llm_instance()
-        return llm_instance.bind_tools(tools)
+        # create_tool_calling_agent returns an 'agent' (the wrapper that performs tool calling)
+        return create_tool_calling_agent(llm_instance, tools)
 
     # Keep .invoke interface
     def invoke(self, prompt):
         llm_instance = self._get_llm_instance()
-        return llm_instance.invoke(prompt)
+        # many ChatGoogleGenerativeAI versions support invoke or __call__
+        try:
+            return llm_instance.invoke(prompt)
+        except Exception:
+            return llm_instance.__call__(prompt)
 
+    # forward attribute access to the current underlying llm instance when possible
+    def __getattr__(self, name):
+        # protect access to internal attributes
+        if name.startswith("_"):
+            raise AttributeError(name)
+        llm_instance = None
+        try:
+            llm_instance = self._get_llm_instance()
+        except Exception:
+            # if we can't create an instance now, raise AttributeError to avoid silent failure
+            raise AttributeError(f"LLM instance unavailable for attribute {name}")
+        return getattr(llm_instance, name)
 
 LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", 240))
 
@@ -485,9 +507,11 @@ You must:
     MessagesPlaceholder(variable_name="agent_scratchpad"),
 ])
 
+# IMPORTANT: create agent using a concrete, underlying LLM instance from the fallback wrapper.
+# This prevents the agent creation code from trying to call missing methods on the wrapper object.
 agent = create_tool_calling_agent(
-    llm=llm,
-    tools=[scrape_url_to_dataframe],  # let the agent call tools if it wants; we will also pre-process scrapes
+    llm=llm._get_llm_instance(),
+    tools=[scrape_url_to_dataframe],
     prompt=prompt
 )
 
@@ -1116,4 +1140,3 @@ async def diagnose(full: bool = Query(False, description="If true, run extended 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
-
