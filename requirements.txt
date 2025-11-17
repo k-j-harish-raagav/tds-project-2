@@ -2,7 +2,9 @@ fastapi==0.110.0
 uvicorn==0.29.0
 python-dotenv==1.0.1
 
-pydantic==1.10.13
+# FIXED: FastAPI-compatible Pydantic v2
+pydantic==2.6.4
+pydantic-core==2.16.3
 python-multipart==0.0.9
 
 pandas==2.2.2
@@ -16,7 +18,7 @@ beautifulsoup4==4.12.3
 lxml==5.2.1
 pillow==10.3.0
 
-# LangChain ecosystem (final fixed versions)
+# LangChain ecosystem (valid, tested)
 langchain==0.1.16
 langchain-core==0.1.52
 langchain-community==0.0.36
